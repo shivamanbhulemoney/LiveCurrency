@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Top 5 Currency Pairs - p5.js</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #0f172a;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    #canvas-container {
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+  </style>
+</head>
+<body>
+  <div id="canvas-container"></div>
+
+  <script>
+    // Top 5 most traded currency pairs in the world
+    const pairs = [
+      { name: "EUR / USD", base: "EUR", target: "USD", invert: true, decimals: 4, rate: 0, history: [] },
+      { name: "USD / JPY", base: "USD", target: "JPY", invert: false, decimals: 2, rate: 0, history: [] },
+      { name: "GBP / USD", base: "GBP", target: "USD", invert: true, decimals: 4, rate: 0, history: [] },
+      { name: "AUD / USD", base: "AUD", target: "USD", invert: true, decimals: 4, rate: 0, history: [] },
+      { name: "USD / CAD", base: "USD", target: "CAD", invert: false, decimals: 4, rate: 0, history: [] }
+    ];
+
+    let lastUpdated = "Fetching live data...";
+    let isLoading = true;
+    let errorMessage = null;
+
+    function setup() {
+      let canvas = createCanvas(800, 600);
+      canvas.parent('canvas-container');
+      textFont('sans-serif');
+      
+      // Fetch initial live data
+      fetchCurrencyData();
+      
+      // Refresh rates automatically every 60 seconds
+      setInterval(fetchCurrencyData, 60000);
+    }
+
+    function fetchCurrencyData() {
+      // Using Open ExchangeRate-API (Free, no key required, CORS-friendly)
+      const url = 'https://open.er-api.com/v6/latest/USD';
+      
+      loadJSON(url, (data) => {
+        if (data && data.rates) {
+          pairs.forEach(pair => {
+            let rawRate;
+            if (pair.invert) {
+              // Convert USD-base rate to foreign-base (e.g., 1 / USD_to_EUR = EUR_to_USD)
+              rawRate = 1 / data.rates[pair.base];
+            } else {
+              rawRate = data.rates[pair.target];
+            }
+            
+            // Populate simulated trend data for visual sparklines
+            if (pair.rate !== 0 && pair.rate !== rawRate) {
+              pair.history.push(rawRate);
+              if (pair.history.length > 20) pair.history.shift();
+            } else if (pair.history.length === 0) {
+              // Generate baseline points around the current rate for the initial visual chart
+              for(let i = 0; i < 15; i++) {
+                let jitter = rawRate * (1 + (Math.random() - 0.5) * 0.002);
+                pair.history.push(jitter);
+              }
+              pair.history.push(rawRate);
+            }
+            
+            pair.rate = rawRate;
+          });
+          
+          let date = new Date(data.time_last_update_utc);
+          lastUpdated = "Last Updated: " + date.toLocaleTimeString() + " UTC";
+          isLoading = false;
+          errorMessage = null;
+        }
+      }, (err) => {
+        errorMessage = "Failed to fetch live rates. Check your internet connection.";
+        isLoading = false;
+      });
+    }
+
+    function draw() {
+      background(15, 23, 42); // Dark slate theme
+      
+      // Header Title
+      fill(255);
+      noStroke();
+      textSize(28);
+      textAlign(LEFT, TOP);
+      text("Global Top 5 Forex Pairs", 40, 35);
+      
+      // Status & Subtitle
+      textSize(14);
+      if (isLoading) {
+        fill(250, 204, 21); // Yellow
+        text("Connecting to live forex feed...", 40, 75);
+      } else if (errorMessage) {
+        fill(248, 113, 113); // Red
+        text(errorMessage, 40, 75);
+      } else {
+        fill(148, 163, 184); // Slate grey
+        text(lastUpdated + " • Live Feed via Open ExchangeRate API", 40, 75);
+      }
+      
+      // Grid layout for Currency Cards
+      let startX = 40;
+      let startY = 120;
+      let cardWidth = 345;
+      let cardHeight = 130;
+      let gapX = 30;
+      let gapY = 25;
+      
+      for (let i = 0; i < pairs.length; i++) {
+        let col = i % 2;
+        let row = Math.floor(i / 2);
+        let x = startX + col * (cardWidth + gapX);
+        let y = startY + row * (cardHeight + gapY);
+        
+        drawCurrencyCard(x, y, cardWidth, cardHeight, pairs[i]);
+      }
+      
+      // Footer
+      fill(100, 116, 139);
+      textSize(12);
+      textAlign(CENTER, BOTTOM);
+      text("Rates update automatically every 60 seconds • Rendered with p5.js", width / 2, height - 20);
+    }
+
+    function drawCurrencyCard(x, y, w, h, pair) {
+      // Interactive Hover Effect
+      let isHovered = mouseX > x && mouseX < x + w && mouseY > y && mouseY < y + h;
+      
+      stroke(isHovered ? color(56, 189, 248) : color(51, 65, 85));
+      strokeWeight(isHovered ? 2 : 1);
+      fill(30, 41, 59);
+      rect(x, y, w, h, 10);
+      
+      // Currency Pair Name
+      noStroke();
+      fill(241, 245, 249);
+      textSize(20);
+      textAlign(LEFT, TOP);
+      text(pair.name, x + 20, y + 20);
+      
+      // Base Currency Label
+      fill(148, 163, 184);
+      textSize(12);
+      text(pair.invert ? "Base: " + pair.base : "Base: USD", x + 20, y + 48);
+
+      // Display Live Rate
+      textAlign(RIGHT, TOP);
+      if (pair.rate > 0) {
+        fill(56, 189, 248); // Cyan
+        textSize(26);
+        text(pair.rate.toFixed(pair.decimals), x + w - 20, y + 18);
+        
+        // Animated LIVE indicator dot
+        let pulse = sin(frameCount * 0.08) * 100 + 155;
+        fill(74, 222, 128, pulse);
+        circle(x + w - 20, y + 55, 8);
+        fill(148, 163, 184);
+        textSize(11);
+        text("LIVE", x + w - 32, y + 50);
+      } else {
+        fill(148, 163, 184);
+        textSize(20);
+        text("Loading...", x + w - 20, y + 22);
+      }
+
+      // Render Mini Sparkline Chart
+      if (pair.history.length > 1) {
+        stroke(56, 189, 248, 180);
+        strokeWeight(2);
+        noFill();
+        beginShape();
+        let sparkW = w - 40;
+        let sparkH = 30;
+        let sparkX = x + 20;
+        let sparkY = y + h - 20;
+        
+        let minVal = Math.min(...pair.history);
+        let maxVal = Math.max(...pair.history);
+        let range = maxVal - minVal;
+        if (range === 0) range = 0.001;
+        
+        for (let j = 0; j < pair.history.length; j++) {
+          let px = sparkX + (j / (pair.history.length - 1)) * sparkW;
+          let py = sparkY - ((pair.history[j] - minVal) / range) * sparkH;
+          vertex(px, py);
+        }
+        endShape();
+      }
+    }
+  </script>
+</body>
+</html>
